@@ -51,9 +51,7 @@
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module-library">
       <library name="scala-async_2.10-1.0.0-SNAPSHOT.jar">
-        <CLASSES>
-          <root url="file://./lib/scala-async_2.10-1.0.0-SNAPSHOT.jar" />
-        </CLASSES>
+        <CLASSES />
         <JAVADOC />
         <SOURCES />
       </library>
@@ -266,7 +264,7 @@
       </library>
     </orderEntry>
     <orderEntry type="inheritedJdk" />
-    <orderEntry type="library" name="scala-reflect-2.10.3" level="project" />
+    <orderEntry type="library" name="scala-compiler-g" level="project" />
   </component>
 </module>
 

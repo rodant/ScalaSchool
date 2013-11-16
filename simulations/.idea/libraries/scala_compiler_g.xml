@@ -1,0 +1,11 @@
+<component name="libraryTable">
+  <library name="scala-compiler-g">
+    <CLASSES>
+      <root url="jar:///usr/share/java/scala-compiler.jar!/" />
+      <root url="jar:///usr/share/java/scala-library.jar!/" />
+      <root url="jar:///usr/share/java/scala-reflect.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
