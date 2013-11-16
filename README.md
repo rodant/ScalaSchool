@@ -1,0 +1,4 @@
+ScalaSchool
+===========
+
+My Scala courses
