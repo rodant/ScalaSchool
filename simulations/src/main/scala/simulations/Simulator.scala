@@ -18,7 +18,7 @@ class Simulator {
     agenda = insert(agenda)
   }
 
-  protected[simulations] def next {
+  protected[simulations] def next() {
     agenda match {
       case List() => {}
       case WorkItem(time, action) :: rest =>
@@ -28,8 +28,8 @@ class Simulator {
     }
   }
 
-  def run {
+  def run() {
     println("*** New propagation ***")
-    while (!agenda.isEmpty) { next }
+    while (!agenda.isEmpty) { next() }
   }
 }

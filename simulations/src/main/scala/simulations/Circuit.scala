@@ -103,27 +103,27 @@ object Circuit extends CircuitSimulator {
   val AndGateDelay = 3
   val OrGateDelay = 5
 
-  def andGateExample {
+  def andGateExample() {
     val in1, in2, out = new Wire
     andGate(in1, in2, out)
     probe("in1", in1)
     probe("in2", in2)
     probe("out", out)
-    in1.setSignal(false)
-    in2.setSignal(false)
+    in1.setSignal(s = false)
+    in2.setSignal(s = false)
     run
 
-    in1.setSignal(true)
+    in1.setSignal(s = true)
     run
 
-    in2.setSignal(true)
+    in2.setSignal(s = true)
     run
   }
 
   //
   // to complete with orGateExample and demuxExample...
   //
-  def orGateExample {
+  def orGateExample() {
     println()
     println("----- Or Gate Example")
     val in1, in2, out = new Wire
@@ -131,18 +131,18 @@ object Circuit extends CircuitSimulator {
     probe("in1", in1)
     probe("in2", in2)
     probe("out", out)
-    in1.setSignal(false)
-    in2.setSignal(false)
+    in1.setSignal(s = false)
+    in2.setSignal(s = false)
     run
 
-    in1.setSignal(false)
+    in1.setSignal(s = false)
     run
 
-    in2.setSignal(true)
+    in2.setSignal(s = true)
     run
   }
 
-  def orGate2Example {
+  def orGate2Example() {
     println()
     println("----- Or Gate2 Example")
     val in1, in2, out = new Wire
@@ -150,23 +150,23 @@ object Circuit extends CircuitSimulator {
     probe("in1", in1)
     probe("in2", in2)
     probe("out", out)
-    in1.setSignal(false)
-    in2.setSignal(false)
+    in1.setSignal(s = false)
+    in2.setSignal(s = false)
     run
 
-    in1.setSignal(false)
+    in1.setSignal(s = false)
     run
 
-    in2.setSignal(true)
+    in2.setSignal(s = true)
     run
   }
 }
 
 object CircuitMain extends App {
   // You can write tests either here, or better in the test class CircuitSuite.
-  Circuit.andGateExample
+  Circuit.andGateExample()
 
-  Circuit.orGateExample
+  Circuit.orGateExample()
 
-  Circuit.orGate2Example
+  Circuit.orGate2Example()
 }
