@@ -111,13 +111,13 @@ object Circuit extends CircuitSimulator {
     probe("out", out)
     in1.setSignal(s = false)
     in2.setSignal(s = false)
-    run
+    run()
 
     in1.setSignal(s = true)
-    run
+    run()
 
     in2.setSignal(s = true)
-    run
+    run()
   }
 
   //
@@ -133,13 +133,13 @@ object Circuit extends CircuitSimulator {
     probe("out", out)
     in1.setSignal(s = false)
     in2.setSignal(s = false)
-    run
+    run()
 
     in1.setSignal(s = false)
-    run
+    run()
 
     in2.setSignal(s = true)
-    run
+    run()
   }
 
   def orGate2Example() {
@@ -152,13 +152,13 @@ object Circuit extends CircuitSimulator {
     probe("out", out)
     in1.setSignal(s = false)
     in2.setSignal(s = false)
-    run
+    run()
 
     in1.setSignal(s = false)
-    run
+    run()
 
     in2.setSignal(s = true)
-    run
+    run()
   }
 }
 
