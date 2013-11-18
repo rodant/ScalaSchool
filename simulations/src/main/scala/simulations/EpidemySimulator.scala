@@ -143,7 +143,7 @@ class EpidemySimulator extends Simulator {
 
   //Rule 3
   def infectRule(p: Person) {
-    if (!p.infected && !p.immune) {
+    if (!p.infected && !p.immune && !p.sick) {
       val existDanger: Boolean = personsInField((p.row, p.col)).exists( p => p.infected || p.immune)
       if (existDanger && randomBelow(100) < transmissibilityRate * 100) {
         p.infected = true
@@ -154,7 +154,7 @@ class EpidemySimulator extends Simulator {
 
   //Rule 4, 5
   def sickRule(p: Person) {
-    if (p.infected && currentTime - p.lastEventTime > incubationTime) {
+    if (p.infected && currentTime - p.lastEventTime >= incubationTime) {
       p.sick = true
       p.lastEventTime = currentTime
     }
@@ -162,7 +162,7 @@ class EpidemySimulator extends Simulator {
 
   //Rule 6
   def dieRule(p: Person) {
-    if (p.sick && currentTime - p.lastEventTime > dieTime - incubationTime) {
+    if (p.sick && currentTime - p.lastEventTime >= dieTime - incubationTime) {
       if (randomBelow(100) < dieRate * 100) {
         p.dead = true
         p.lastEventTime = currentTime
@@ -172,16 +172,16 @@ class EpidemySimulator extends Simulator {
 
   //Rule 7
   def immuneRule(p: Person) {
-    if (p.sick && currentTime - p.lastEventTime > immuneTime - incubationTime) {
-      p.immune = true
+    if (p.sick && currentTime - p.lastEventTime >= immuneTime - incubationTime) {
       p.sick = false
+      p.immune = true
       p.lastEventTime = currentTime
     }
   }
 
   //Rule 8
   def healthyRule(p: Person) {
-    if (p.immune && currentTime - p.lastEventTime > healTime - immuneTime) {
+    if (p.immune && currentTime - p.lastEventTime >= healTime - immuneTime) {
       p.immune = false
       p.lastEventTime = currentTime
     }
