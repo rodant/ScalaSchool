@@ -33,7 +33,7 @@ class EpidemySimulator extends Simulator {
       val person = new Person(id)
       if (id < population * prevalenceRate) {
         person.infected = true
-        person.lastEventTime = 0
+        person.infectedEventTime = 0
       }
       p = person :: p
     }
@@ -54,13 +54,13 @@ class EpidemySimulator extends Simulator {
     // to complete with simulation logic
     //
     var waitCount = 0
-    var lastEventTime = 0
+    var infectedEventTime = 0
   }
 
   afterDelay(1) { step }
 
   def step() {
-    persons.filter(!_.dead) foreach {
+    persons foreach {
       p =>
         move(p)
         infectRule(p)
@@ -120,13 +120,12 @@ class EpidemySimulator extends Simulator {
           val newPosition = (p.row, if (p.col > 0) p.col - 1 else roomColumns - 1)
           moveToPosition(newPosition, LEFT)
         }
-        // last mean used if all neighbour cells are visible infected
-        case _ => {
-          p.row = (p.row + 1) % roomRows
-        }
+        case _ => // stay as last mean used if all neighbour cells are visible infected
       }
     }
     // Method logic
+    if (p.dead) return
+
     if (p.waitCount > 1) p.waitCount = p.waitCount - 1
     else {
       if (p.waitCount < 1) {
@@ -143,47 +142,46 @@ class EpidemySimulator extends Simulator {
 
   //Rule 3
   def infectRule(p: Person) {
-    if (!p.infected && !p.immune && !p.sick) {
+    if (!p.infected && !p.immune && !p.sick && !p.dead) {
       val existDanger: Boolean = personsInField((p.row, p.col)).exists( p => p.infected || p.immune)
       if (existDanger && randomBelow(100) < transmissibilityRate * 100) {
         p.infected = true
-        p.lastEventTime = currentTime
+        p.infectedEventTime = currentTime
       }
     }
   }
 
   //Rule 4, 5
   def sickRule(p: Person) {
-    if (p.infected && currentTime - p.lastEventTime >= incubationTime) {
+    if (p.infected && !p.dead && !p.immune && currentTime - p.infectedEventTime >= incubationTime) {
       p.sick = true
-      p.lastEventTime = currentTime
     }
   }
 
   //Rule 6
   def dieRule(p: Person) {
-    if (p.sick && currentTime - p.lastEventTime >= dieTime - incubationTime) {
+    if (p.sick && currentTime - p.infectedEventTime >= dieTime) {
       if (randomBelow(100) < dieRate * 100) {
         p.dead = true
-        p.lastEventTime = currentTime
       }
     }
   }
 
   //Rule 7
   def immuneRule(p: Person) {
-    if (p.sick && currentTime - p.lastEventTime >= immuneTime - incubationTime) {
+    if (p.sick && !p.dead && currentTime - p.infectedEventTime >= immuneTime) {
       p.sick = false
       p.immune = true
-      p.lastEventTime = currentTime
     }
   }
 
   //Rule 8
   def healthyRule(p: Person) {
-    if (p.immune && currentTime - p.lastEventTime >= healTime - immuneTime) {
+    if (p.immune && currentTime - p.infectedEventTime >= healTime) {
+      p.infected = false
+      p.sick = false
       p.immune = false
-      p.lastEventTime = currentTime
+      p.infectedEventTime = currentTime
     }
   }
 }

@@ -98,4 +98,30 @@ class EpidemySuite extends FunSuite {
 	  }
 	  assert(infectedTimes > 0, "A person should get infected according to the transmissibility rate when he moves into a room with an infectious person")
   }
+
+  test("infected person can die after 14 days") {
+    val es = new EpidemySimulator
+    while (es.agenda.head.time < 100) es.next()
+    val deaths = es.persons.count(_.dead)
+
+    assert(deaths > 0, "At least a person must be dead")
+  }
+
+  test("person should avoid rooms with visibly infected people (sick or dead)") {
+    val es = new EpidemySimulator
+    val chosenPerson = es.persons.head
+    val neighbours = es.persons.filter(p => (p.row == chosenPerson.row && math.abs(p.col - chosenPerson.col) % 6 == 1)
+      || (p.col == chosenPerson.col && (math.abs(p.row - chosenPerson.row) % 6 == 1)))
+    val randomLessThan2 = (math.random * 2).toInt
+    neighbours.foreach {
+      p =>
+        if (randomLessThan2 == 0) p.sick = true
+        else p.dead = true
+    }
+
+    val personRow = chosenPerson.row
+    val personCol = chosenPerson.col
+    es.move(chosenPerson)
+    assert(chosenPerson.row == personRow && chosenPerson.col == personCol)
+  }
 }
