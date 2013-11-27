@@ -41,10 +41,20 @@ class NodeScalaSuite extends FunSuite {
       case e => assert(false)
     }
 
-    val fs = List(Future.always(0))
-    val f1 = Future.all(fs)
-    assert(f1.isCompleted)
-    assert(Await.result(f1, 0 nanos) == List(0))
+    val fs1 = List(Future(0))
+    val f1 = Future.all(fs1)
+    assert(Await.result(f1, 50 millis) == List(0), "f1 is not completed!!!")
+
+    val fs2 = List(Future(0), Future(1))
+    val f2 = Future.all(fs2)
+    assert(Await.result(f2, 50 millis) == List(0, 1))
+
+    val fs3 = List(Future(0), Future.failed(new NoSuchElementException))
+    val f3 = Future.all(fs3)
+    f3.onComplete{
+      case Success(i) => assert(false, "f3 was successful!!!")
+      case _ =>
+    }
   }
 
   test("CancellationTokenSource should allow stopping the computation") {
