@@ -33,7 +33,7 @@ libraryDependencies <++= (currentProject) { c =>
     "org.slf4j" % "slf4j-api" % "1.7.5",
     "org.slf4j" % "slf4j-simple" % "1.7.5",
     "com.squareup.retrofit" % "retrofit" % "1.0.0",
-    "org.scala-lang.modules" %% "scala-async" % "0.9.0-M2"
+    "org.scala-lang.modules" %% "scala-async" % "0.9.0-M4"
   )
   else Seq.empty
 }

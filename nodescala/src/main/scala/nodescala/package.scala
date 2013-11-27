@@ -1,3 +1,4 @@
+import scala.collection.mutable.ListBuffer
 import scala.language.postfixOps
 import scala.util._
 import scala.util.control.NonFatal
@@ -12,24 +13,71 @@ package object nodescala {
 
   /** Adds extensions methods to the `Future` companion object.
    */
-  implicit class FutureCompanionOps[T](val f: Future.type) extends AnyVal {
+  implicit class FutureCompanionOps[T](val f: Future.type) {
 
     /** Returns a future that is always completed with `value`.
      */
-    def always[T](value: T): Future[T] = ???
+    def always[T](value: T): Future[T] = {
+      val p = Promise[T]()
+
+      p.success(value)
+
+      p.future
+    }
 
     /** Returns a future that is never completed.
      *
      *  This future may be useful when testing if timeout logic works correctly.
      */
-    def never[T]: Future[T] = ???
+    def never[T]: Future[T] = {
+      val p = Promise[T]()
+
+      p.future
+    }
 
     /** Given a list of futures `fs`, returns the future holding the list of values of all the futures from `fs`.
      *  The returned future is completed only once all of the futures in `fs` have been completed.
      *  The values in the list are in the same order as corresponding futures `fs`.
      *  If any of the futures `fs` fails, the resulting future also fails.
      */
-    def all[T](fs: List[Future[T]]): Future[List[T]] = ???
+    def _all[T](fs: List[Future[T]]): Future[List[T]] = {
+      val p = Promise[List[T]]()
+
+      async {
+        var result = List[T]()
+        var fsWork = fs
+        while (!fsWork.isEmpty) {
+          val r = await(fs.head)
+          result = r :: result
+          fsWork = fsWork.tail
+        }
+        p.success(result)
+      }
+
+      p.future
+    }
+
+    def __all[T](fs: List[Future[T]]): Future[List[T]] = {
+      val p = Promise[List[T]]()
+      async {
+        var _fs = fs
+        val r = ListBuffer[T]()
+        while (_fs != Nil) {
+          r += await { _fs.head }
+          _fs = _fs.tail
+        }
+        p.success(r.toList)
+      }
+      p.future
+    }
+
+    def all[T](fs: List[Future[T]]): Future[List[T]] = {
+      val successful = Promise[List[T]]()
+      successful.success(Nil)
+      fs.foldRight(successful.future) {
+        (f, acc) => for ( x <- f; xs <- acc ) yield x :: xs
+      }
+    }
 
     /** Given a list of futures `fs`, returns the future holding the value of the future from `fs` that completed first.
      *  If the first completing future in `fs` fails, then the result is failed as well.

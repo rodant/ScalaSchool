@@ -34,6 +34,19 @@ class NodeScalaSuite extends FunSuite {
     }
   }
 
+  test("The \"all\" combinator should return the future holding the list of values of all the futures") {
+    val allResult = Future.all(Nil)
+    assert(allResult.isCompleted)
+    allResult.onFailure {
+      case e => assert(false)
+    }
+
+    val fs = List(Future.always(0))
+    val f1 = Future.all(fs)
+    assert(f1.isCompleted)
+    assert(Await.result(f1, 0 nanos) == List(0))
+  }
+
   test("CancellationTokenSource should allow stopping the computation") {
     val cts = CancellationTokenSource()
     val ct = cts.cancellationToken
