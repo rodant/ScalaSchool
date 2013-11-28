@@ -40,36 +40,6 @@ package object nodescala {
      *  The values in the list are in the same order as corresponding futures `fs`.
      *  If any of the futures `fs` fails, the resulting future also fails.
      */
-    def _all[T](fs: List[Future[T]]): Future[List[T]] = {
-      val p = Promise[List[T]]()
-
-      async {
-        var result = List[T]()
-        var fsWork = fs
-        while (!fsWork.isEmpty) {
-          val r = await(fs.head)
-          result = r :: result
-          fsWork = fsWork.tail
-        }
-        p.success(result)
-      }
-
-      p.future
-    }
-
-    def __all[T](fs: List[Future[T]]): Future[List[T]] = {
-      val p = Promise[List[T]]()
-      async {
-        var _fs = fs
-        val r = ListBuffer[T]()
-        while (_fs != Nil) {
-          r += await { _fs.head }
-          _fs = _fs.tail
-        }
-        p.success(r.toList)
-      }
-      p.future
-    }
 
     def all[T](fs: List[Future[T]]): Future[List[T]] = {
       val successful = Promise[List[T]]()
@@ -88,7 +58,12 @@ package object nodescala {
      *
      *  may return a `Future` succeeded with `1`, `2` or failed with an `Exception`.
      */
-    def any[T](fs: List[Future[T]]): Future[T] = ???
+    def any[T](fs: List[Future[T]]): Future[T] = {
+      val p = Promise[T]()
+      p.success _
+
+      p.future
+    }
 
     /** Returns a future with a unit value that is completed after time `t`.
      */

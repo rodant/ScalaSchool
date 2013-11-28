@@ -57,6 +57,14 @@ class NodeScalaSuite extends FunSuite {
     }
   }
 
+  test("any combinator should return the first future that completes") {
+    val anyResult = Future.any(List[Future[Int]]())
+    anyResult.onComplete {
+      case Failure(t) => assert(false, "for empty list the future was unsuccessful")
+      case _ =>
+    }
+  }
+
   test("CancellationTokenSource should allow stopping the computation") {
     val cts = CancellationTokenSource()
     val ct = cts.cancellationToken
