@@ -63,6 +63,14 @@ class NodeScalaSuite extends FunSuite {
       case Failure(t) => assert(false, "for empty list the future was unsuccessful")
       case _ =>
     }
+
+    val f = Future.any(List(Future { 1 }, Future { Thread.sleep(1000); 2 }, Future { Thread.sleep(1000); throw new Exception }))
+    assert(Await.result(f, 500 millis) == 1, "any didn't return 1")
+
+    val f2 = Future.any(List(Future { Thread.sleep(1000); 1 }, Future { Thread.sleep(1000); 2 }, Future { throw new Exception }))
+    f2.onComplete {
+      case Success(n) => assert(false, "")
+    }
   }
 
   test("CancellationTokenSource should allow stopping the computation") {
