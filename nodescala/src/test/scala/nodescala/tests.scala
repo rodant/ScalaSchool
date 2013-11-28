@@ -69,10 +69,26 @@ class NodeScalaSuite extends FunSuite {
 
     val f2 = Future.any(List(Future { Thread.sleep(1000); 1 }, Future { Thread.sleep(1000); 2 }, Future { throw new Exception }))
     f2.onComplete {
-      case Success(n) => assert(false, "")
+      case Success(n) => assert(false, "f2 was successful")
     }
   }
 
+  test("delay") {
+    val f = Future.delay(50 millis)
+    blocking {
+      Thread.sleep(40)
+      assert(!f.isCompleted, "the future is completed before the delay")
+      Thread.sleep(15)
+      assert(f.isCompleted, "the future isn't completed after the delay")
+      assert(() == f.value.get.get, "the result isn't unit")
+    }
+  }
+
+  test("run") {
+
+  }
+
+  /*
   test("CancellationTokenSource should allow stopping the computation") {
     val cts = CancellationTokenSource()
     val ct = cts.cancellationToken
@@ -188,7 +204,7 @@ class NodeScalaSuite extends FunSuite {
     test(immutable.Map("WorksForThree" -> List("Always works. Trust me.")))
 
     dummySubscription.unsubscribe()
-  }
+  } */
 
 }
 
