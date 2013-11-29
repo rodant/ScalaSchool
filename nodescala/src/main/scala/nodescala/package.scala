@@ -174,7 +174,7 @@ package object nodescala {
    *  returns a `cancellationToken` which is cancelled by calling `unsubscribe`.
    *  
    *  After calling `unsubscribe` once, the associated `cancellationToken` will
-   *  forever remain cancelled -- its `isCancelled` will return `false.
+   *  forever remain cancelled -- its `isCancelled` will return true.
    */
   trait CancellationTokenSource extends Subscription {
     def cancellationToken: CancellationToken
