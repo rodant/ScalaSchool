@@ -13,6 +13,8 @@ import org.scalatest._
 import NodeScala._
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
+import java.util.NoSuchElementException
+import scala.NoSuchElementException
 
 @RunWith(classOf[JUnitRunner])
 class NodeScalaSuite extends FunSuite {
@@ -70,6 +72,7 @@ class NodeScalaSuite extends FunSuite {
     val f2 = Future.any(List(Future { Thread.sleep(1000); 1 }, Future { Thread.sleep(1000); 2 }, Future { throw new Exception }))
     f2.onComplete {
       case Success(n) => assert(false, "f2 was successful")
+      case _ =>
     }
   }
 
@@ -80,15 +83,31 @@ class NodeScalaSuite extends FunSuite {
       assert(!f.isCompleted, "the future is completed before the delay")
       Thread.sleep(15)
       assert(f.isCompleted, "the future isn't completed after the delay")
-      assert(() == f.value.get.get, "the result isn't unit")
+      assert(f.value.get.get.isInstanceOf[Unit], "the result isn't unit")
     }
   }
 
-  test("run") {
+  test("now returns the result of this future if it is completed now") {
+    val f = Future.successful("Success")
+    assert(f.now == "Success", "now didn't return Success")
+    val f2 = Future.failed(new Exception)
+    try {
+      f2.now
+      assert(false, "now for completed failed future not throw")
+    } catch {
+      case _: Throwable =>
+    }
 
+    val f3 = Future.never
+    try {
+      f3.now
+      assert(false, "now for not completed future not throw")
+    } catch {
+      case e: NoSuchElementException =>
+      case _: Throwable => assert(false, "now thrown a wrong exception")
+    }
   }
 
-  /*
   test("CancellationTokenSource should allow stopping the computation") {
     val cts = CancellationTokenSource()
     val ct = cts.cancellationToken
@@ -204,7 +223,7 @@ class NodeScalaSuite extends FunSuite {
     test(immutable.Map("WorksForThree" -> List("Always works. Trust me.")))
 
     dummySubscription.unsubscribe()
-  } */
+  }
 
 }
 
