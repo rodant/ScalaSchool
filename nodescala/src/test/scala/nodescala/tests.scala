@@ -76,11 +76,11 @@ class NodeScalaSuite extends FunSuite {
   }
 
   test("delay") {
-    val f = Future.delay(50 millis)
+    val f = Future.delay(3 seconds)
     blocking {
-      Thread.sleep(40)
+      Thread.sleep(1000)
       assert(!f.isCompleted, "the future is completed before the delay")
-      Thread.sleep(15)
+      Thread.sleep(3050)
       assert(f.isCompleted, "the future isn't completed after the delay")
       assert(f.value.get.get.isInstanceOf[Unit], "the result isn't unit")
     }
@@ -222,6 +222,25 @@ class NodeScalaSuite extends FunSuite {
     test(immutable.Map("WorksForThree" -> List("Always works. Trust me.")))
 
     dummySubscription.unsubscribe()
+  }
+
+  test("Server should stop a long running response") {
+    val dummy = new DummyServer(8191)
+    var finished = false
+    val dummySubscription = dummy.start("/testDir") { request =>
+      Thread.sleep((30 seconds).toMillis)
+      finished = true
+      List("Ready\n").toIterator
+    }
+
+    // wait until server is really installed
+    Thread.sleep(500)
+
+    dummy.emit("/testDir", immutable.Map("LongRequest" -> List("Does it work?")))
+    dummySubscription.unsubscribe()
+
+    Thread.sleep(1000)
+    assert(finished, "Not finished!")
   }
 
 }
