@@ -58,7 +58,7 @@ package object nodescala {
     def any[T](fs: List[Future[T]]): Future[T] = {
       val p = Promise[T]()
       for (f <- fs) {
-        f.onComplete(t => p.complete(f.value.get))
+        f.onComplete(t => p.tryComplete(f.value.get))
       }
 
       p.future
