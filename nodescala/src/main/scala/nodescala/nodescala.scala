@@ -1,13 +1,11 @@
 package nodescala
 
-import com.sun.net.httpserver._
 import scala.concurrent._
-import scala.concurrent.duration._
 import ExecutionContext.Implicits.global
 import scala.async.Async.{async, await}
 import scala.collection._
 import scala.collection.JavaConversions._
-import java.util.concurrent.{Executor, ThreadPoolExecutor, TimeUnit, LinkedBlockingQueue}
+import java.util.concurrent.{ThreadPoolExecutor, TimeUnit, LinkedBlockingQueue}
 import com.sun.net.httpserver.{HttpExchange, HttpHandler, HttpServer}
 import java.net.InetSocketAddress
 import scala.util.Success
@@ -33,7 +31,7 @@ trait NodeScala {
   private def respond(exchange: Exchange, token: CancellationToken, response: Response): Unit = {
     def accRespond(acc: List[String]): List[String] = {
       acc match {
-        case Nil => exchange.close(); acc
+        case Nil => acc
         case string :: ss => {
           exchange.write(string)
           if (token.isCancelled) Nil else accRespond(ss)
@@ -41,7 +39,11 @@ trait NodeScala {
       }
     }
 
-    accRespond(response.toList)
+    try {
+      accRespond(response.toList)
+    } finally {
+      exchange.close()
+    }
   }
 
   /** A server:
@@ -62,7 +64,7 @@ trait NodeScala {
       async {
         while (!token.isCancelled) {
           val (req, ex) = await(listener.nextRequest())
-          respond(ex, token, handler(req))
+          await(Future(respond(ex, token, handler(req))))
         }
       }
     }

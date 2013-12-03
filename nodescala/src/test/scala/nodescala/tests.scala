@@ -14,6 +14,7 @@ import NodeScala._
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import scala.NoSuchElementException
+import scala.collection.mutable.ListBuffer
 
 @RunWith(classOf[JUnitRunner])
 class NodeScalaSuite extends FunSuite {
@@ -224,23 +225,31 @@ class NodeScalaSuite extends FunSuite {
     dummySubscription.unsubscribe()
   }
 
-  test("Server should stop a long running response") {
+  test("Server should stop a long response") {
     val dummy = new DummyServer(8191)
-    var finished = false
     val dummySubscription = dummy.start("/testDir") { request =>
-      Thread.sleep((30 seconds).toMillis)
-      finished = true
-      List("Ready\n").toIterator
+      val result = new ListBuffer[String]()
+      for (i <- 0 to 1000000) {
+        result += i.toString
+      }
+      result.toIterator
     }
 
     // wait until server is really installed
     Thread.sleep(500)
 
-    dummy.emit("/testDir", immutable.Map("LongRequest" -> List("Does it work?")))
+    val webpage = dummy.emit("/testDir", immutable.Map("LongRequest" -> List("Does it work?")))
+    Thread.sleep(500)
     dummySubscription.unsubscribe()
 
-    Thread.sleep(1000)
-    assert(finished, "Not finished!")
+    try {
+      val f = webpage.loaded.future
+      Await.ready(f, 1 second)
+      val result: String = f.value.get.get
+      assert(!result.isEmpty, "Empty response!")
+    } catch {
+      case _: Throwable => assert(false, "Exception!")
+    }
   }
 
 }
