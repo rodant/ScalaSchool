@@ -61,10 +61,17 @@ trait NodeScala {
     val listener = createListener(relativePath)
     val listenerSubscription = listener.start()
     val contextSubscription = Future.run() { token =>
-      async {
+      /*async {
         while (!token.isCancelled) {
           val (req, ex) = await(listener.nextRequest())
           await(Future(respond(ex, token, handler(req))))
+        }
+      }*/
+      Future {
+        while (!token.isCancelled) {
+          for {
+            (req, ex) <- listener.nextRequest()
+          } yield respond(ex, token, handler(req))
         }
       }
     }
