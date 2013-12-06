@@ -40,6 +40,11 @@
     <orderEntry type="library" name="rxjava-core-0.15.01" level="project" />
     <orderEntry type="library" name="rxjava-scala-0.15.01" level="project" />
     <orderEntry type="library" name="async-http-client-1.7.16" level="project" />
+    <orderEntry type="library" name="hamcrest-core-1.1" level="project" />
+    <orderEntry type="library" name="config-1.0.2" level="project" />
+    <orderEntry type="library" name="slf4j-api-1.7.5" level="project" />
+    <orderEntry type="library" name="slf4j-simple-1.7.5" level="project" />
+    <orderEntry type="library" name="test-interface-0.5" level="project" />
   </component>
 </module>
 
