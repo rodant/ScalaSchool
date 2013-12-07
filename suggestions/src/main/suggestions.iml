@@ -47,6 +47,7 @@
     <orderEntry type="library" name="slf4j-api-1.7.5" level="project" />
     <orderEntry type="library" name="slf4j-simple-1.7.5" level="project" />
     <orderEntry type="library" name="test-interface-0.5" level="project" />
+    <orderEntry type="library" name="scala-actors-2.10.1" level="application" />
   </component>
 </module>
 
