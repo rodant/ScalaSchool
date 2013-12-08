@@ -4,6 +4,8 @@
       <root url="jar://$PROJECT_DIR$/lib_managed/jars/com.netflix.rxjava/rxjava-scala/rxjava-scala-0.15.0.jar!/" />
     </CLASSES>
     <JAVADOC />
-    <SOURCES />
+    <SOURCES>
+      <root url="jar://$USER_HOME$/.ideaLibSources/rxjava-scala-0.15.0-sources.jar!/" />
+    </SOURCES>
   </library>
 </component>

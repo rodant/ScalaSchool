@@ -2,16 +2,14 @@ package suggestions
 package gui
 
 import scala.language.postfixOps
-import scala.collection.mutable.ListBuffer
-import scala.collection.JavaConverters._
 import scala.concurrent._
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.{ Try, Success, Failure }
-import rx.subscriptions.CompositeSubscription
-import rx.lang.scala.Observable
+import scala.util.{ Try, Success}
+import rx.lang.scala.{Notification, Observable}
 import observablex._
-import search._
+import rx.lang.scala.Notification.{OnCompleted, OnError, OnNext}
+import rx.lang.scala.subjects.ReplaySubject
 
 trait WikipediaApi {
 
@@ -37,7 +35,7 @@ trait WikipediaApi {
      *
      * E.g. `"erik", "erik meijer", "martin` should become `"erik", "erik_meijer", "martin"`
      */
-    def sanitized: Observable[String] = ???
+    def sanitized: Observable[String] = obs.map(_.replace(' ', '_'))
 
   }
 
@@ -48,7 +46,16 @@ trait WikipediaApi {
      *
      * E.g. `1, 2, 3, !Exception!` should become `Success(1), Success(2), Success(3), Failure(Exception), !TerminateStream!`
      */
-    def recovered: Observable[Try[T]] = ???
+    def recovered: Observable[Try[T]] = {
+      val result = ReplaySubject[Try[T]]()
+      obs.materialize.subscribe(_ match {
+        case OnNext(t) => result.onNext(Success(t))
+        case OnError(e) => result.onError(e)
+        case _ => result.onCompleted()
+      })
+
+      result
+    }
 
     /** Emits the events from the `obs` observable, until `totalSec` seconds have elapsed.
      *
@@ -56,7 +63,10 @@ trait WikipediaApi {
      *
      * Note: uses the existing combinators on observables.
      */
-    def timedOut(totalSec: Long): Observable[T] = ???
+    def timedOut(totalSec: Long): Observable[T] = {
+      val seconds = Observable.interval(1 second).take(totalSec.toInt)
+      obs.zip(seconds).map(_._1)
+    }
 
 
     /** Given a stream of events `obs` and a method `requestMethod` to map a request `T` into
@@ -84,7 +94,7 @@ trait WikipediaApi {
      *
      * Observable(Success(1), Succeess(1), Succeess(1), Succeess(2), Succeess(2), Succeess(2), Succeess(3), Succeess(3), Succeess(3))
      */
-    def concatRecovered[S](requestMethod: T => Observable[S]): Observable[Try[S]] = ???
+    def concatRecovered[S](requestMethod: T => Observable[S]): Observable[Try[S]] = obs.flatMap(requestMethod).recovered
 
   }
 
