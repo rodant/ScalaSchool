@@ -2,23 +2,17 @@ package suggestions
 package gui
 
 import scala.collection.mutable.ListBuffer
-import scala.collection.JavaConverters._
-import scala.concurrent._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.swing._
-import scala.util.{ Try, Success, Failure }
+import scala.util.Try
 import scala.swing.event._
 import swing.Swing._
 import javax.swing.UIManager
 import Orientation._
-import rx.subscriptions.CompositeSubscription
 import rx.lang.scala.Observable
 import rx.lang.scala.Subscription
 import observablex._
 import search._
-import rx.subjects.ReplaySubject
-import rx.lang.scala.subjects.ReplaySubject
-import ObservableEx._
 
 object WikipediaSuggest extends SimpleSwingApplication with ConcreteSwingApi with ConcreteWikipediaApi {
 
