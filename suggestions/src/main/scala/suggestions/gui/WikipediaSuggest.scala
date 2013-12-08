@@ -16,6 +16,9 @@ import rx.lang.scala.Observable
 import rx.lang.scala.Subscription
 import observablex._
 import search._
+import rx.subjects.ReplaySubject
+import rx.lang.scala.subjects.ReplaySubject
+import ObservableEx._
 
 object WikipediaSuggest extends SimpleSwingApplication with ConcreteSwingApi with ConcreteWikipediaApi {
 
@@ -81,10 +84,10 @@ object WikipediaSuggest extends SimpleSwingApplication with ConcreteSwingApi wit
      */
 
     // TO IMPLEMENT
-    val searchTerms: Observable[String] = ???
+    val searchTerms: Observable[String] = searchTermField.textValues
 
     // TO IMPLEMENT
-    val suggestions: Observable[Try[List[String]]] = ???
+    val suggestions: Observable[Try[List[String]]] = searchTerms.sanitized.flatMap(s => ObservableEx(wikipediaSuggestion(s))).recovered
 
 
     // TO IMPLEMENT
