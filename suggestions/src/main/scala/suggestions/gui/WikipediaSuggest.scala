@@ -4,7 +4,7 @@ package gui
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.swing._
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 import scala.swing.event._
 import swing.Swing._
 import javax.swing.UIManager
@@ -85,19 +85,29 @@ object WikipediaSuggest extends SimpleSwingApplication with ConcreteSwingApi wit
 
 
     // TO IMPLEMENT
-    val suggestionSubscription: Subscription =  suggestions.observeOn(eventScheduler) subscribe {
-      x => ???
+    val suggestionSubscription: Subscription =  suggestions.observeOn(eventScheduler) subscribe { _ match {
+        case Success(list) => suggestionList.listData = list
+        case Failure(e) => status.text = "Request unsuccessful: " + e.getMessage
+      }
     }
 
     // TO IMPLEMENT
-    val selections: Observable[String] = ???
+    val selections: Observable[String] = {
+      val filteredClicks = button.clicks.filter {btn => suggestionList.selection.indices.size > 0}
+      filteredClicks.map { btn =>
+        val selectedItems = suggestionList.selection.items
+        selectedItems(0)
+      }
+    }
 
     // TO IMPLEMENT
-    val pages: Observable[Try[String]] = ???
+    val pages: Observable[Try[String]] = selections.flatMap(s => ObservableEx(wikipediaPage(s))).recovered
 
     // TO IMPLEMENT
-    val pageSubscription: Subscription = pages.observeOn(eventScheduler) subscribe {
-      x => ???
+    val pageSubscription: Subscription = pages.observeOn(eventScheduler) subscribe { _ match {
+        case Success(s) => editorpane.text = s
+        case Failure(e) => status.text = "Page qequest unsuccessful: " + e.getMessage
+      }
     }
 
   }

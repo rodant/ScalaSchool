@@ -4,6 +4,8 @@
       <root url="jar://$PROJECT_DIR$/lib_managed/jars/org.scala-lang/scala-swing/scala-swing-2.10.3.jar!/" />
     </CLASSES>
     <JAVADOC />
-    <SOURCES />
+    <SOURCES>
+      <root url="jar://$USER_HOME$/.ideaLibSources/scala-swing-2.10.3-sources.jar!/" />
+    </SOURCES>
   </library>
 </component>
