@@ -33,6 +33,14 @@ class WikipediaApiTest extends FunSuite {
 
   import mockApi._
 
+  test("timeOut should return the first value") {
+    var count = 0
+    Observable(1, 2, 3).zip(Observable.interval(1700 millis)).timedOut(1L).subscribe { pair =>
+      count += 1
+    }
+    assert(count == 1, s"count = $count")
+  }
+
   test("WikipediaApi should make the stream valid using sanitized") {
     val notvalid = Observable("erik", "erik meijer", "martin")
     val valid = notvalid.sanitized

@@ -57,6 +57,17 @@ trait WikipediaApi {
       result
     }
 
+    /** Returns a future with a unit value that is completed after time `t`.
+      */
+    def delay(t: Duration): Future[Unit] = {
+      Future[Unit] {
+        blocking {
+          Thread.sleep(t.toMillis)
+          Future.successful(())
+        }
+      }
+    }
+
     /** Emits the events from the `obs` observable, until `totalSec` seconds have elapsed.
      *
      * After `totalSec` seconds, if `obs` is not yet completed, the result observable becomes completed.
@@ -64,8 +75,16 @@ trait WikipediaApi {
      * Note: uses the existing combinators on observables.
      */
     def timedOut(totalSec: Long): Observable[T] = {
-      val seconds = Observable.interval(1 second).take(totalSec.toInt)
-      obs.zip(seconds).map(_._1)
+      val result = ReplaySubject[T]()
+      Observable(delay(totalSec seconds)).merge(obs).filter(!_.isInstanceOf[Unit]).materialize.subscribe {
+        _ match {
+          case OnCompleted(u) => result.onCompleted()
+          case OnNext(t: T) => result.onNext(t)
+          case OnError(e) => result.onError(e)
+        }
+      }
+
+      result
     }
 
 
