@@ -5,8 +5,8 @@ import scala.language.postfixOps
 import scala.concurrent._
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.{ Try, Success}
-import rx.lang.scala.{Notification, Observable}
+import scala.util.{Failure, Try, Success}
+import rx.lang.scala.Observable
 import observablex._
 import rx.lang.scala.Notification.{OnCompleted, OnError, OnNext}
 import rx.lang.scala.subjects.ReplaySubject
@@ -50,8 +50,8 @@ trait WikipediaApi {
       val result = ReplaySubject[Try[T]]()
       obs.materialize.subscribe(_ match {
         case OnNext(t) => result.onNext(Success(t))
-        case OnError(e) => result.onError(e)
-        case _ => result.onCompleted()
+        case OnError(e) => result.onNext(Failure(e))
+        case OnCompleted(u) => result.onCompleted()
       })
 
       result
@@ -75,16 +75,8 @@ trait WikipediaApi {
      * Note: uses the existing combinators on observables.
      */
     def timedOut(totalSec: Long): Observable[T] = {
-      val result = ReplaySubject[T]()
-      Observable(delay(totalSec seconds)).merge(obs).filter(!_.isInstanceOf[Unit]).materialize.subscribe {
-        _ match {
-          case OnCompleted(u) => result.onCompleted()
-          case OnNext(t: T) => result.onNext(t)
-          case OnError(e) => result.onError(e)
-        }
-      }
-
-      result
+      val seconds = Observable.interval(totalSec second).filter(_ > 0).take(1)
+      obs.takeUntil(seconds)
     }
 
 
