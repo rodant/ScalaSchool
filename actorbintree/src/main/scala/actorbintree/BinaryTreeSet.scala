@@ -66,7 +66,10 @@ class BinaryTreeSet extends Actor {
 
   // optional
   /** Accepts `Operation` and `GC` messages. */
-  val normal: Receive = { case _ => ??? }
+  val normal: Receive = {
+    case GC => ???
+    case op: Operation => root ! op
+  }
 
   // optional
   /** Handles messages while garbage collection is performed.
@@ -101,7 +104,54 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
 
   // optional
   /** Handles `Operation` messages and `CopyTo` requests. */
-  val normal: Receive = { case _ => ??? }
+  val normal: Receive = {
+    case CopyTo(tree) => ???
+    case Insert(r, id, i) =>
+      if ( i == elem) {
+        r ! OperationFinished(id)
+      }
+      else if (i < elem) {
+        subtrees.get(Left) match {
+          case Some(node) => node ! Insert(r, id, i)
+          case None => subtrees += Left -> context.actorOf(props(i, initiallyRemoved = false)); r ! OperationFinished(id)
+        }
+      }
+      else {
+        subtrees.get(Right) match {
+          case Some(node) => node ! Insert(r, id, i)
+          case None => subtrees += Right -> context.actorOf(props(i, initiallyRemoved = false)); r ! OperationFinished(id)
+        }
+      }
+    case Remove(r, id, i) =>
+      if (i == elem) {
+        removed = true
+        r ! OperationFinished(id)
+      } else if (i < elem) {
+        subtrees.get(Left) match {
+          case Some(node) => node ! Remove(r, id, i)
+          case None => r ! OperationFinished(id)
+        }
+      } else {
+        subtrees.get(Right) match {
+          case Some(node) => node ! Remove(r, id, i)
+          case None => r ! OperationFinished(id)
+        }
+      }
+    case Contains(r, id, i) =>
+      if (i == elem) {
+        r ! ContainsResult(id, result = !removed)
+      } else if (i < elem) {
+        subtrees.get(Left) match {
+          case Some(node) => node ! Contains(r, id, i)
+          case None => r ! ContainsResult(id, result = false)
+        }
+      } else {
+        subtrees.get(Right) match {
+          case Some(node) => node ! Contains(r, id, i)
+          case None => r ! ContainsResult(id, result = false)
+        }
+      }
+  }
 
   // optional
   /** `expected` is the set of ActorRefs whose replies we are waiting for,
