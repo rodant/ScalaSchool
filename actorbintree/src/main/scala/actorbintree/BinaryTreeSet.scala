@@ -5,6 +5,8 @@ package actorbintree
 
 import akka.actor._
 import scala.collection.immutable.Queue
+import actorbintree.BinaryTreeSet.Operation
+import scala.util.Random
 
 object BinaryTreeSet {
 
@@ -67,7 +69,11 @@ class BinaryTreeSet extends Actor {
   // optional
   /** Accepts `Operation` and `GC` messages. */
   val normal: Receive = {
-    case GC => ???
+    case GC => {
+      /*val newRoot = createRoot
+      root ! CopyTo(newRoot)
+      context.become(garbageCollecting(newRoot))*/
+    }
     case op: Operation => root ! op
   }
 
@@ -76,7 +82,15 @@ class BinaryTreeSet extends Actor {
     * `newRoot` is the root of the new binary tree where we want to copy
     * all non-removed elements into.
     */
-  def garbageCollecting(newRoot: ActorRef): Receive = ???
+  def garbageCollecting(newRoot: ActorRef): Receive = {
+    case CopyFinished => {
+      root ! Stop
+      root = newRoot
+      root ! BulkOperation(pendingQueue)
+      context.become(normal)
+    }
+    case op: Operation => pendingQueue.enqueue(op)
+  }
 
 }
 
@@ -89,6 +103,9 @@ object BinaryTreeNode {
   case class CopyTo(treeNode: ActorRef)
   case object CopyFinished
 
+  case object Stop
+  case class BulkOperation(ops: Seq[Operation])
+
   def props(elem: Int, initiallyRemoved: Boolean) = Props(classOf[BinaryTreeNode],  elem, initiallyRemoved)
 }
 
@@ -98,6 +115,7 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
 
   var subtrees = Map[Position, ActorRef]()
   var removed = initiallyRemoved
+  var copySender: ActorRef = self
 
   // optional
   def receive = normal
@@ -105,9 +123,36 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
   // optional
   /** Handles `Operation` messages and `CopyTo` requests. */
   val normal: Receive = {
-    case CopyTo(tree) => ???
+    case CopyTo(tree) => {
+      var expectedReplyees = Set[ActorRef]()
+      subtrees.get(Left) match {
+        case Some(node) => {
+          expectedReplyees += node
+          node ! CopyTo(tree)
+        }
+        case _ =>
+      }
+      subtrees.get(Right) match {
+        case Some(node) => {
+          expectedReplyees += node
+          node ! CopyTo(tree)
+        }
+        case _ =>
+      }
+      if (!removed) {
+        expectedReplyees += tree
+        tree ! Insert(self, Random.nextInt(), elem)
+      }
+      if (expectedReplyees.nonEmpty) {
+        copySender = sender
+        context.become(copying(expectedReplyees, insertConfirmed = false))
+      } else {
+        sender ! CopyFinished
+      }
+    }
     case Insert(r, id, i) =>
       if ( i == elem) {
+        removed = false
         r ! OperationFinished(id)
       }
       else if (i < elem) {
@@ -151,12 +196,47 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
           case None => r ! ContainsResult(id, result = false)
         }
       }
+    case Stop => {
+      subtrees.get(Left) match {
+        case Some(node) => node ! Stop
+        case _ =>
+      }
+      subtrees.get(Right) match {
+        case Some(node) => node ! Stop
+        case _ =>
+      }
+      self ! PoisonPill
+    }
+    case BulkOperation(ops) => {
+      ops.foreach(self ! _)
+    }
   }
 
   // optional
+
+  var expectedReplyees = Set[ActorRef]()
+
   /** `expected` is the set of ActorRefs whose replies we are waiting for,
     * `insertConfirmed` tracks whether the copy of this node to the new tree has been confirmed.
     */
-  def copying(expected: Set[ActorRef], insertConfirmed: Boolean): Receive = ???
+  def copying(expected: Set[ActorRef], insertConfirmed: Boolean): Receive = {
+    expectedReplyees = expected;
+    {
+      case OperationFinished if !insertConfirmed && expected.contains(sender) => {
+        expectedReplyees -= sender
+        if (expectedReplyees.isEmpty) {
+          copySender ! CopyFinished
+          context.become(normal)
+        }
+      }
+      case CopyFinished => {
+        expectedReplyees -= sender
+        if (expectedReplyees.isEmpty) {
+          copySender ! CopyFinished
+          context.become(normal)
+        }
+      }
+    }
+  }
 
 }
