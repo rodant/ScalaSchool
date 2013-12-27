@@ -47,6 +47,9 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   var replicators = Set.empty[ActorRef]
 
   var expectedSnapshotSeq = 0
+  var persistence = context.system.actorOf(persistenceProps)
+  // pending acknowledgements of operations with (id, receiver) -> (message, requester)
+  var pendingAcks = Map.empty[(Long, ActorRef), (Any, ActorRef)]
 
   arbiter ! Join
 
@@ -73,15 +76,32 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     case Get(key, id) => sender ! GetResult(key, kv.get(key), id)
     case Snapshot(key, valueOption, seq) => {
       if (seq == expectedSnapshotSeq) {
-        valueOption match {
-          case Some(value) => kv += key -> value
-          case None => kv -= key
-        }
         expectedSnapshotSeq += 1
-        sender ! SnapshotAck(key, seq)
+        val idActor = (seq, persistence)
+        val persist = Persist(key, valueOption, seq)
+        pendingAcks += idActor -> (persist, sender)
+        persistence ! persist
+        context.system.scheduler.scheduleOnce(100 millis, self, idActor)
       }
       else if (seq < expectedSnapshotSeq) {
         sender ! SnapshotAck(key, seq)
+      }
+    }
+    case (id: Long, actor: ActorRef) if pendingAcks.contains((id, actor)) => {
+      persistence ! pendingAcks(id, actor)._1
+      context.system.scheduler.scheduleOnce(100 millis, self, (id, actor))
+    }
+    case Persisted(key, id) => {
+      pendingAcks.get((id, sender)) match {
+        case Some((Persist(key, valueOption, id), requester)) => {
+          pendingAcks -= ((id, sender))
+          valueOption match {
+            case Some(value) => kv += key -> value
+            case None => kv -= key
+          }
+          requester ! SnapshotAck(key, id)
+        }
+        case None =>
       }
     }
   }
