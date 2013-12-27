@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="EclipseCodeFormatter">
+    <option name="defaultSettings" value="true" />
+    <option name="enableGWT" value="true" />
+    <option name="formatter" value="ECLIPSE" />
+    <option name="id" value="1342427981334" />
+    <option name="importOrderConfigFilePath" value="$USER_HOME$/Downloads/formatter-tb.xml" />
+    <option name="importOrderFromFile" value="true" />
+    <option name="name" value="default" />
+    <option name="pathToConfigFileJava" value="$PROJECT_DIR$/../../workspace_acrolinx/acrolinxJavaSourceFormat.xml" />
+    <option name="selectedJavaProfile" value="acrolinx Java source format" />
+  </component>
+  <component name="IdProvider" IDEtalkID="F870F882488869E4E6583AAA50485721" />
+  <component name="ProjectRootManager" version="2" languageLevel="JDK_1_6" assert-keyword="true" jdk-15="true" project-jdk-name="1.6" project-jdk-type="JavaSDK">
+    <output url="file://$PROJECT_DIR$/out" />
+  </component>
+</project>
+
