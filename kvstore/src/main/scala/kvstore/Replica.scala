@@ -46,6 +46,8 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   // the current set of replicators
   var replicators = Set.empty[ActorRef]
 
+  var expectedSnapshotSeq = 0
+
   arbiter ! Join
 
   def receive = {
@@ -68,7 +70,20 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
 
   /* TODO Behavior for the replica role. */
   val replica: Receive = {
-    case _ =>
+    case Get(key, id) => sender ! GetResult(key, kv.get(key), id)
+    case Snapshot(key, valueOption, seq) => {
+      if (seq == expectedSnapshotSeq) {
+        valueOption match {
+          case Some(value) => kv += key -> value
+          case None => kv -= key
+        }
+        expectedSnapshotSeq += 1
+        sender ! SnapshotAck(key, seq)
+      }
+      else if (seq < expectedSnapshotSeq) {
+        sender ! SnapshotAck(key, seq)
+      }
+    }
   }
 
 }
