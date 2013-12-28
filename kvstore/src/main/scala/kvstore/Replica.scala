@@ -67,7 +67,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
   def sendPersist(id: Long, key: String, optionValue: Option[String]) {
     acks += (id, persistence) ->(sender, Persist(key, optionValue, id))
     persistence ! Persist(key, optionValue, id)
-    context.system.scheduler.scheduleOnce(100 millis, self, (id, persistence))
+    context.system.scheduler.scheduleOnce(100 millis, self, (id, persistence, 1))
   }
 
   /* TODO Behavior for  the leader role. */
@@ -83,9 +83,14 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
 
     case Get(key, id) => sender ! GetResult(key, kv.get(key), id)
 
-    case (id: Long, actor: ActorRef) if actor == persistence && acks.contains((id, actor)) => {
-      persistence ! acks((id, actor))._2
-      context.system.scheduler.scheduleOnce(100 millis, self, (id, actor))
+    case (id: Long, actor: ActorRef, count: Int) if actor == persistence && acks.contains((id, actor)) => {
+      if (count == 10) {
+        acks((id, actor))._1 ! OperationFailed(id)
+        acks -= ((id, actor))
+      } else {
+        persistence ! acks((id, actor))._2
+        context.system.scheduler.scheduleOnce(100 millis, self, (id, actor, count + 1))
+      }
     }
 
     case Persisted(key, id) if acks contains((id, persistence)) => {
@@ -107,9 +112,10 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
           case Some(value) => kv += key -> value
           case None => kv -= key
         }
-        acks += (seq, persistence) -> (sender, Persist(key, valueOption, seq))
+        sendPersist(seq, key, valueOption)
+        /*acks += (seq, persistence) -> (sender, Persist(key, valueOption, seq))
         persistence ! Persist(key, valueOption, seq)
-        context.system.scheduler.scheduleOnce(100 millis, self, (seq, persistence))
+        context.system.scheduler.scheduleOnce(100 millis, self, (seq, persistence))*/
       }
       else if (seq < expectedSnapshotSeq) {
         log.info(s"*** Snapshot, $seq < $expectedSnapshotSeq")
@@ -117,10 +123,15 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
       }
     }
 
-    case (seq: Long, persistence: ActorRef) if acks contains((seq, persistence)) => {
+    case (seq: Long, persistence: ActorRef, count: Int) if acks contains((seq, persistence)) => {
       log.info(s"*** Timeout, $seq")
-      persistence ! acks((seq, persistence))._2
-      context.system.scheduler.scheduleOnce(100 millis, self, (seq, persistence))
+      if (count == 10) {
+        acks((seq, persistence))._1 ! OperationFailed(seq)
+        acks -= ((seq, persistence))
+      } else {
+        persistence ! acks((seq, persistence))._2
+        context.system.scheduler.scheduleOnce(100 millis, self, (seq, persistence, count + 1))
+      }
       log.info(s"*** Persist again, $seq")
     }
 
