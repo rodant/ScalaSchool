@@ -45,8 +45,8 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
 
   var expectedSnapshotSeq = 0
   var persistence = context.actorOf(persistenceProps)
-  // map from sequence number to pair of sender and request
-  var acks = Map.empty[Long, (ActorRef, Snapshot)]
+  // map from sequence number and receiver to pair of requester and request
+  var acks = Map.empty[(Long, ActorRef), (ActorRef, Any)]
 
   @throws(classOf[Exception])
   override def preStart(): Unit = {
@@ -64,17 +64,35 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
     case JoinedSecondary => context.become(replica)
   }
 
+  def sendPersist(id: Long, key: String, optionValue: Option[String]) {
+    acks += (id, persistence) ->(sender, Persist(key, optionValue, id))
+    persistence ! Persist(key, optionValue, id)
+    context.system.scheduler.scheduleOnce(100 millis, self, (id, persistence))
+  }
+
   /* TODO Behavior for  the leader role. */
   val leader: Receive = {
     case Insert(key, value, id) => {
       kv += key -> value
-      sender ! OperationAck(id)
+      sendPersist(id, key, Some(value))
     }
     case Remove(key, id) => {
       kv -= key
-      sender ! OperationAck(id)
+      sendPersist(id, key, None)
     }
+
     case Get(key, id) => sender ! GetResult(key, kv.get(key), id)
+
+    case (id: Long, actor: ActorRef) if actor == persistence && acks.contains((id, actor)) => {
+      persistence ! acks((id, actor))._2
+      context.system.scheduler.scheduleOnce(100 millis, self, (id, actor))
+    }
+
+    case Persisted(key, id) if acks contains((id, persistence)) => {
+      val requestor = acks((id, persistence))._1
+      acks -= ((id, persistence))
+      requestor ! OperationAck(id)
+    }
   }
 
   /* TODO Behavior for the replica role. */
@@ -89,9 +107,9 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
           case Some(value) => kv += key -> value
           case None => kv -= key
         }
-        acks += seq -> (sender, Snapshot(key, valueOption, seq))
+        acks += (seq, persistence) -> (sender, Persist(key, valueOption, seq))
         persistence ! Persist(key, valueOption, seq)
-        context.system.scheduler.scheduleOnce(100 millis, self, seq)
+        context.system.scheduler.scheduleOnce(100 millis, self, (seq, persistence))
       }
       else if (seq < expectedSnapshotSeq) {
         log.info(s"*** Snapshot, $seq < $expectedSnapshotSeq")
@@ -99,17 +117,16 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
       }
     }
 
-    case seq: Long if acks contains(seq) => {
+    case (seq: Long, persistence: ActorRef) if acks contains((seq, persistence)) => {
       log.info(s"*** Timeout, $seq")
-      val req = acks(seq)._2
-      persistence ! Persist(req.key, req.valueOption, seq)
-      context.system.scheduler.scheduleOnce(100 millis, self, seq)
+      persistence ! acks((seq, persistence))._2
+      context.system.scheduler.scheduleOnce(100 millis, self, (seq, persistence))
       log.info(s"*** Persist again, $seq")
     }
 
-    case Persisted(key, seq) if acks contains (seq) => {
-      val requester = acks(seq)._1
-      acks -= seq
+    case Persisted(key, seq) if acks contains ((seq, persistence)) => {
+      val requester = acks((seq, persistence))._1
+      acks -= ((seq, persistence))
       requester ! SnapshotAck(key, seq)
       log.info(s"*** Persisted. Sent SnapshotAck($key, $seq).")
     }
