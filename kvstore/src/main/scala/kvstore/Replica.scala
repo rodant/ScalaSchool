@@ -1,17 +1,14 @@
 package kvstore
 
-import akka.actor.{ OneForOneStrategy, Props, ActorRef, Actor }
+import akka.actor._
 import kvstore.Arbiter._
 import scala.collection.immutable.Queue
 import akka.actor.SupervisorStrategy.Restart
 import scala.annotation.tailrec
 import akka.pattern.{ ask, pipe }
-import akka.actor.Terminated
 import scala.concurrent.duration._
-import akka.actor.PoisonPill
-import akka.actor.OneForOneStrategy
-import akka.actor.SupervisorStrategy
 import akka.util.Timeout
+import scala.Some
 
 object Replica {
   sealed trait Operation {
@@ -30,7 +27,7 @@ object Replica {
   def props(arbiter: ActorRef, persistenceProps: Props): Props = Props(new Replica(arbiter, persistenceProps))
 }
 
-class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
+class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with ActorLogging {
   import Replica._
   import Replicator._
   import Persistence._
@@ -47,11 +44,20 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   var replicators = Set.empty[ActorRef]
 
   var expectedSnapshotSeq = 0
-  var persistence = context.system.actorOf(persistenceProps)
-  // pending acknowledgements of operations with (id, receiver) -> (message, requester)
-  var pendingAcks = Map.empty[(Long, ActorRef), (Any, ActorRef)]
+  var persistence = context.actorOf(persistenceProps)
+  // map from sequence number to pair of sender and request
+  var acks = Map.empty[Long, (ActorRef, Snapshot)]
 
-  arbiter ! Join
+  @throws(classOf[Exception])
+  override def preStart(): Unit = {
+    arbiter ! Join
+    context.watch(persistence)
+  }
+
+  @throws(classOf[Exception])
+  override def postStop(): Unit = {
+    context.unwatch(persistence)
+  }
 
   def receive = {
     case JoinedPrimary   => context.become(leader)
@@ -74,35 +80,42 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   /* TODO Behavior for the replica role. */
   val replica: Receive = {
     case Get(key, id) => sender ! GetResult(key, kv.get(key), id)
+
     case Snapshot(key, valueOption, seq) => {
       if (seq == expectedSnapshotSeq) {
+        log.info(s"*** Snapshot, $seq == $expectedSnapshotSeq")
         expectedSnapshotSeq += 1
-        val idActor = (seq, persistence)
-        val persist = Persist(key, valueOption, seq)
-        pendingAcks += idActor -> (persist, sender)
-        persistence ! persist
-        context.system.scheduler.scheduleOnce(100 millis, self, idActor)
+        valueOption match {
+          case Some(value) => kv += key -> value
+          case None => kv -= key
+        }
+        acks += seq -> (sender, Snapshot(key, valueOption, seq))
+        persistence ! Persist(key, valueOption, seq)
+        context.system.scheduler.scheduleOnce(100 millis, self, seq)
       }
       else if (seq < expectedSnapshotSeq) {
+        log.info(s"*** Snapshot, $seq < $expectedSnapshotSeq")
         sender ! SnapshotAck(key, seq)
       }
     }
-    case (id: Long, actor: ActorRef) if pendingAcks.contains((id, actor)) => {
-      persistence ! pendingAcks(id, actor)._1
-      context.system.scheduler.scheduleOnce(100 millis, self, (id, actor))
+
+    case seq: Long if acks contains(seq) => {
+      log.info(s"*** Timeout, $seq")
+      val req = acks(seq)._2
+      persistence ! Persist(req.key, req.valueOption, seq)
+      context.system.scheduler.scheduleOnce(100 millis, self, seq)
+      log.info(s"*** Persist again, $seq")
     }
-    case Persisted(key, id) => {
-      pendingAcks.get((id, sender)) match {
-        case Some((Persist(key, valueOption, id), requester)) => {
-          pendingAcks -= ((id, sender))
-          valueOption match {
-            case Some(value) => kv += key -> value
-            case None => kv -= key
-          }
-          requester ! SnapshotAck(key, id)
-        }
-        case None =>
-      }
+
+    case Persisted(key, seq) if acks contains (seq) => {
+      val requester = acks(seq)._1
+      acks -= seq
+      requester ! SnapshotAck(key, seq)
+      log.info(s"*** Persisted. Sent SnapshotAck($key, $seq).")
+    }
+
+    case Terminated(persistor) => {
+      persistence = context.actorOf(persistenceProps)
     }
   }
 
