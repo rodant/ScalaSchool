@@ -73,8 +73,26 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
     context.system.scheduler.scheduleOnce(retryStep millis, self, (id, persistence, retryStep))
   }
 
+  private def persistenceRetryBehavior(ackMessage: (String, Long) => Any): PartialFunction[Any, Unit] = {
+    case (id: Long, receiver: ActorRef, count: Int) if receiver == persistence && acks.contains((id, receiver)) => {
+      if (count == globalTimeout) {
+        acks((id, receiver))._1 ! OperationFailed(id)
+        acks -= ((id, receiver))
+      } else {
+        receiver ! acks((id, receiver))._2
+        context.system.scheduler.scheduleOnce(retryStep millis, self, (id, receiver, count + retryStep))
+      }
+    }
+
+    case Persisted(key, id) if acks contains((id, persistence)) => {
+      val requestor = acks((id, persistence))._1
+      acks -= ((id, persistence))
+      requestor ! ackMessage(key, id)//OperationAck(id)
+    }
+  }
+
   /* TODO Behavior for  the leader role. */
-  val leader: Receive = {
+  private val primaryBehavior: PartialFunction[Any, Unit] = {
     case Insert(key, value, id) => {
       kv += key -> value
       sendPersist(id, key, Some(value))
@@ -85,26 +103,12 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
     }
 
     case Get(key, id) => sender ! GetResult(key, kv.get(key), id)
-
-    case (id: Long, receiver: ActorRef, count: Int) if receiver == persistence && acks.contains((id, receiver)) => {
-      if (count == globalTimeout) {
-        acks((id, receiver))._1 ! OperationFailed(id)
-        acks -= ((id, receiver))
-      } else {
-        persistence ! acks((id, receiver))._2
-        context.system.scheduler.scheduleOnce(retryStep millis, self, (id, receiver, count + retryStep))
-      }
-    }
-
-    case Persisted(key, id) if acks contains((id, persistence)) => {
-      val requestor = acks((id, persistence))._1
-      acks -= ((id, persistence))
-      requestor ! OperationAck(id)
-    }
   }
 
+  val leader: Receive = primaryBehavior orElse persistenceRetryBehavior((key: String, id: Long) => OperationAck(id))
+
   /* TODO Behavior for the replica role. */
-  val replica: Receive = {
+  private val secondaryBehavior: PartialFunction[Any, Unit] = {
     case Get(key, id) => sender ! GetResult(key, kv.get(key), id)
 
     case Snapshot(key, valueOption, seq) => {
@@ -116,9 +120,6 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
           case None => kv -= key
         }
         sendPersist(seq, key, valueOption)
-        /*acks += (seq, persistence) -> (sender, Persist(key, valueOption, seq))
-        persistence ! Persist(key, valueOption, seq)
-        context.system.scheduler.scheduleOnce(100 millis, self, (seq, persistence))*/
       }
       else if (seq < expectedSnapshotSeq) {
         log.info(s"*** Snapshot, $seq < $expectedSnapshotSeq")
@@ -126,28 +127,10 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
       }
     }
 
-    case (seq: Long, persistence: ActorRef, count: Int) if acks contains((seq, persistence)) => {
-      log.info(s"*** Timeout, $seq")
-      if (count == globalTimeout) {
-        acks((seq, persistence))._1 ! OperationFailed(seq)
-        acks -= ((seq, persistence))
-      } else {
-        persistence ! acks((seq, persistence))._2
-        context.system.scheduler.scheduleOnce(retryStep millis, self, (seq, persistence, count + retryStep))
-      }
-      log.info(s"*** Persist again, $seq")
-    }
-
-    case Persisted(key, seq) if acks contains ((seq, persistence)) => {
-      val requester = acks((seq, persistence))._1
-      acks -= ((seq, persistence))
-      requester ! SnapshotAck(key, seq)
-      log.info(s"*** Persisted. Sent SnapshotAck($key, $seq).")
-    }
-
     case Terminated(persistor) => {
       persistence = context.actorOf(persistenceProps)
     }
   }
 
+  val replica: Receive = secondaryBehavior orElse persistenceRetryBehavior(SnapshotAck)
 }
