@@ -45,7 +45,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
 
   var expectedSnapshotSeq = 0
   var persistence = context.actorOf(persistenceProps)
-  // map from sequence number and receiver to pair of requester and request
+  // pending acknowledgments: map from sequence number and receiver to pair of requester and message
   var acks = Map.empty[(Long, ActorRef), (ActorRef, Any)]
 
   @throws(classOf[Exception])
@@ -64,10 +64,13 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
     case JoinedSecondary => context.become(replica)
   }
 
-  def sendPersist(id: Long, key: String, optionValue: Option[String]) {
+  private val retryStep = 100
+  private val globalTimeout: Int = 1000
+
+  private def sendPersist(id: Long, key: String, optionValue: Option[String]) {
     acks += (id, persistence) ->(sender, Persist(key, optionValue, id))
     persistence ! Persist(key, optionValue, id)
-    context.system.scheduler.scheduleOnce(100 millis, self, (id, persistence, 1))
+    context.system.scheduler.scheduleOnce(retryStep millis, self, (id, persistence, retryStep))
   }
 
   /* TODO Behavior for  the leader role. */
@@ -83,13 +86,13 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
 
     case Get(key, id) => sender ! GetResult(key, kv.get(key), id)
 
-    case (id: Long, actor: ActorRef, count: Int) if actor == persistence && acks.contains((id, actor)) => {
-      if (count == 10) {
-        acks((id, actor))._1 ! OperationFailed(id)
-        acks -= ((id, actor))
+    case (id: Long, receiver: ActorRef, count: Int) if receiver == persistence && acks.contains((id, receiver)) => {
+      if (count == globalTimeout) {
+        acks((id, receiver))._1 ! OperationFailed(id)
+        acks -= ((id, receiver))
       } else {
-        persistence ! acks((id, actor))._2
-        context.system.scheduler.scheduleOnce(100 millis, self, (id, actor, count + 1))
+        persistence ! acks((id, receiver))._2
+        context.system.scheduler.scheduleOnce(retryStep millis, self, (id, receiver, count + retryStep))
       }
     }
 
@@ -125,12 +128,12 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
 
     case (seq: Long, persistence: ActorRef, count: Int) if acks contains((seq, persistence)) => {
       log.info(s"*** Timeout, $seq")
-      if (count == 10) {
+      if (count == globalTimeout) {
         acks((seq, persistence))._1 ! OperationFailed(seq)
         acks -= ((seq, persistence))
       } else {
         persistence ! acks((seq, persistence))._2
-        context.system.scheduler.scheduleOnce(100 millis, self, (seq, persistence, count + 1))
+        context.system.scheduler.scheduleOnce(retryStep millis, self, (seq, persistence, count + retryStep))
       }
       log.info(s"*** Persist again, $seq")
     }
