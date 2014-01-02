@@ -42,6 +42,10 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
   var secondaries = Map.empty[ActorRef, ActorRef]
   // the current set of replicators
   var replicators = Set.empty[ActorRef]
+  // the next sequence number for each replicator
+  var replicatorToNextSeq = Map.empty[ActorRef, Long]
+  // (seq, replicator) -> id for pending operations
+  var seqReplicatorToPendingId = Map.empty[(Long, ActorRef), Long]
 
   var expectedSnapshotSeq = 0
   var persistence = context.actorOf(persistenceProps)
@@ -73,8 +77,8 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
     context.system.scheduler.scheduleOnce(retryInterval millis, self, (id, receiver, retryInterval))
   }
 
-  private def persistenceRetryBehavior(ackMessage: (String, Long) => Any): PartialFunction[Any, Unit] = {
-    case (id: Long, receiver: ActorRef, count: Int) if receiver == persistence && acks.contains((id, receiver)) => {
+  private def retryBehavior(ackMessage: (String, Long) => Any): PartialFunction[Any, Unit] = {
+    case (id: Long, receiver: ActorRef, count: Int) if acks.contains((id, receiver)) => {
       if (count == retryTimeout) {
         acks((id, receiver))._1 ! OperationFailed(id)
         acks -= ((id, receiver))
@@ -87,25 +91,58 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
     case Persisted(key, id) if acks contains((id, persistence)) => {
       val requestor = acks((id, persistence))._1
       acks -= ((id, persistence))
-      requestor ! ackMessage(key, id)//OperationAck(id)
+      if (noPendingReplications(id)) {
+        requestor ! ackMessage(key, id)
+      }
+    }
+
+    case Replicated(key, seq) if seqReplicatorToPendingId.contains(seq, sender) => {
+      val id = seqReplicatorToPendingId(seq, sender)
+      val requestor = acks((id, sender))._1
+      acks -= ((id, sender))
+      seqReplicatorToPendingId -= ((seq, sender))
+      if (noPendingReplications(id) && !acks.contains((id, persistence))) {
+        requestor ! ackMessage(key, id)
+      }
     }
   }
 
+  private def noPendingReplications(id: Long): Boolean = replicators.forall(!acks.contains(id, _))
+
   /* TODO Behavior for  the leader role. */
+  private def sendInitialToReplicators(id: Long, key: String, optionValue: Option[String]) {
+    replicators foreach { replicator =>
+        val seq = replicatorToNextSeq(replicator)
+        sendInitialMessage(id, replicator, Replicate(key, optionValue, seq))
+        replicatorToNextSeq += replicator -> (seq + 1)
+        seqReplicatorToPendingId += (seq, replicator) -> id
+    }
+  }
+
   private val primaryBehavior: PartialFunction[Any, Unit] = {
     case Insert(key, value, id) => {
       kv += key -> value
       sendInitialMessage(id, persistence, Persist(key, Some(value), id))
+      sendInitialToReplicators(id, key, Some(value))
     }
     case Remove(key, id) => {
       kv -= key
       sendInitialMessage(id, persistence, Persist(key, None, id))
+      sendInitialToReplicators(id, key, None)
     }
 
     case Get(key, id) => sender ! GetResult(key, kv.get(key), id)
+
+    case Replicas(replicas) => {
+      log.info(s"**** Replicas $replicas")
+      replicators = replicas.filter(_ != self) map(replica => context.actorOf(Replicator.props(replica)))
+      replicators foreach {
+        replicatorToNextSeq += _ -> 0
+      }
+    }
   }
 
-  val leader: Receive = primaryBehavior orElse persistenceRetryBehavior((key: String, id: Long) => OperationAck(id))
+  val leader: Receive = primaryBehavior orElse retryBehavior((key: String, id: Long) => OperationAck(id))
 
   /* TODO Behavior for the replica role. */
   private val secondaryBehavior: PartialFunction[Any, Unit] = {
@@ -132,5 +169,5 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
     }
   }
 
-  val replica: Receive = secondaryBehavior orElse persistenceRetryBehavior(SnapshotAck)
+  val replica: Receive = secondaryBehavior orElse retryBehavior(SnapshotAck)
 }
