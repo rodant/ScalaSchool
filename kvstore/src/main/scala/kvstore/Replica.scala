@@ -64,23 +64,23 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
     case JoinedSecondary => context.become(replica)
   }
 
-  private val retryStep = 100
-  private val globalTimeout: Int = 1000
+  private val retryInterval = 100
+  private val retryTimeout: Int = 1000
 
-  private def sendPersist(id: Long, key: String, optionValue: Option[String]) {
-    acks += (id, persistence) ->(sender, Persist(key, optionValue, id))
-    persistence ! Persist(key, optionValue, id)
-    context.system.scheduler.scheduleOnce(retryStep millis, self, (id, persistence, retryStep))
+  private def sendInitialMessage(id: Long, receiver: ActorRef, message: Any) {
+    acks += (id, receiver) ->(sender, message)
+    receiver ! message
+    context.system.scheduler.scheduleOnce(retryInterval millis, self, (id, receiver, retryInterval))
   }
 
   private def persistenceRetryBehavior(ackMessage: (String, Long) => Any): PartialFunction[Any, Unit] = {
     case (id: Long, receiver: ActorRef, count: Int) if receiver == persistence && acks.contains((id, receiver)) => {
-      if (count == globalTimeout) {
+      if (count == retryTimeout) {
         acks((id, receiver))._1 ! OperationFailed(id)
         acks -= ((id, receiver))
       } else {
         receiver ! acks((id, receiver))._2
-        context.system.scheduler.scheduleOnce(retryStep millis, self, (id, receiver, count + retryStep))
+        context.system.scheduler.scheduleOnce(retryInterval millis, self, (id, receiver, count + retryInterval))
       }
     }
 
@@ -95,11 +95,11 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
   private val primaryBehavior: PartialFunction[Any, Unit] = {
     case Insert(key, value, id) => {
       kv += key -> value
-      sendPersist(id, key, Some(value))
+      sendInitialMessage(id, persistence, Persist(key, Some(value), id))
     }
     case Remove(key, id) => {
       kv -= key
-      sendPersist(id, key, None)
+      sendInitialMessage(id, persistence, Persist(key, None, id))
     }
 
     case Get(key, id) => sender ! GetResult(key, kv.get(key), id)
@@ -119,7 +119,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
           case Some(value) => kv += key -> value
           case None => kv -= key
         }
-        sendPersist(seq, key, valueOption)
+        sendInitialMessage(seq, persistence, Persist(key, valueOption, seq))
       }
       else if (seq < expectedSnapshotSeq) {
         log.info(s"*** Snapshot, $seq < $expectedSnapshotSeq")
