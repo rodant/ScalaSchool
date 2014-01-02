@@ -9,6 +9,7 @@ import akka.pattern.{ ask, pipe }
 import scala.concurrent.duration._
 import akka.util.Timeout
 import scala.Some
+import scala.actors.!
 
 object Replica {
   sealed trait Operation {
@@ -77,6 +78,16 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
     context.system.scheduler.scheduleOnce(retryInterval millis, self, (id, receiver, retryInterval))
   }
 
+  private def onReplecated(key: String, seq: Long, replicator: ActorRef, ack: (String, Long) => Any) {
+    val id = seqReplicatorToPendingId(seq, replicator)
+    val requester = acks((id, replicator))._1
+    acks -= ((id, replicator))
+    seqReplicatorToPendingId -= ((seq, replicator))
+    if (noPendingReplications(id) && !acks.contains((id, persistence))) {
+      requester ! ack(key, id)
+    }
+  }
+
   private def retryBehavior(ackMessage: (String, Long) => Any): PartialFunction[Any, Unit] = {
     case (id: Long, receiver: ActorRef, count: Int) if acks.contains((id, receiver)) => {
       if (count == retryTimeout) {
@@ -97,20 +108,14 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
     }
 
     case Replicated(key, seq) if seqReplicatorToPendingId.contains(seq, sender) => {
-      val id = seqReplicatorToPendingId(seq, sender)
-      val requestor = acks((id, sender))._1
-      acks -= ((id, sender))
-      seqReplicatorToPendingId -= ((seq, sender))
-      if (noPendingReplications(id) && !acks.contains((id, persistence))) {
-        requestor ! ackMessage(key, id)
-      }
+      onReplecated(key, seq, sender, ackMessage)
     }
   }
 
   private def noPendingReplications(id: Long): Boolean = replicators.forall(!acks.contains(id, _))
 
   /* TODO Behavior for  the leader role. */
-  private def sendInitialToReplicators(id: Long, key: String, optionValue: Option[String]) {
+  private def sendInitialToReplicators(id: Long, key: String, optionValue: Option[String], replicators: Set[ActorRef]) {
     replicators foreach { replicator =>
         val seq = replicatorToNextSeq(replicator)
         sendInitialMessage(id, replicator, Replicate(key, optionValue, seq))
@@ -123,21 +128,45 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
     case Insert(key, value, id) => {
       kv += key -> value
       sendInitialMessage(id, persistence, Persist(key, Some(value), id))
-      sendInitialToReplicators(id, key, Some(value))
+      sendInitialToReplicators(id, key, Some(value), replicators)
     }
     case Remove(key, id) => {
       kv -= key
       sendInitialMessage(id, persistence, Persist(key, None, id))
-      sendInitialToReplicators(id, key, None)
+      sendInitialToReplicators(id, key, None, replicators)
     }
 
     case Get(key, id) => sender ! GetResult(key, kv.get(key), id)
 
     case Replicas(replicas) => {
-      log.info(s"**** Replicas $replicas")
-      replicators = replicas.filter(_ != self) map(replica => context.actorOf(Replicator.props(replica)))
-      replicators foreach {
-        replicatorToNextSeq += _ -> 0
+      var addedReplicators = Set.empty[ActorRef]
+      replicas.filter(_ != self) foreach { replica =>
+        if (!secondaries.keySet.contains(replica)) {
+          val replicator = context.actorOf(Replicator.props(replica))
+          secondaries += replica -> replicator
+          replicators += replicator
+          replicatorToNextSeq += replicator -> 0
+          addedReplicators += replicator
+        }
+      }
+
+      kv.foreach[Unit] { (pair) =>
+        sendInitialToReplicators(0, pair._1, Some(pair._2), addedReplicators)
+      }
+
+      val removedReplicas = secondaries.keys.filter(!replicas.contains(_))
+      removedReplicas foreach { removedReplica =>
+        val replicator = secondaries(removedReplica)
+        replicatorToNextSeq -= replicator
+        replicators -= replicator
+        secondaries -= removedReplica
+        context.stop(replicator)
+        val pendingsForReplicator: Iterable[(Long, ActorRef)] = acks.keys.filter(_._2 == replicator)
+        pendingsForReplicator foreach { pending =>
+          val replicateMessage = acks(pending)._2.asInstanceOf[Replicate]
+          onReplecated(replicateMessage.key, replicateMessage.id, replicator, (key: String, id: Long) => OperationAck(id))
+          self ! Replicated(replicateMessage.key, replicateMessage.id)
+        }
       }
     }
   }
@@ -150,7 +179,6 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
 
     case Snapshot(key, valueOption, seq) => {
       if (seq == expectedSnapshotSeq) {
-        log.info(s"*** Snapshot, $seq == $expectedSnapshotSeq")
         expectedSnapshotSeq += 1
         valueOption match {
           case Some(value) => kv += key -> value
@@ -159,7 +187,6 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor with
         sendInitialMessage(seq, persistence, Persist(key, valueOption, seq))
       }
       else if (seq < expectedSnapshotSeq) {
-        log.info(s"*** Snapshot, $seq < $expectedSnapshotSeq")
         sender ! SnapshotAck(key, seq)
       }
     }
