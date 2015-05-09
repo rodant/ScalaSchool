@@ -32,14 +32,7 @@
       <src_folder value="file://$MODULE_DIR$/src/test/scala" expected_position="1" />
     </src_description>
   </component>
-  <component name="FacetManager">
-    <facet type="scala" name="Scala">
-      <configuration>
-        <option name="compilerLibraryLevel" value="Global" />
-        <option name="compilerLibraryName" value="scala-compiler-g" />
-      </configuration>
-    </facet>
-  </component>
+  <component name="FacetManager" />
   <component name="NewModuleRootManager" inherit-compiler-output="false">
     <output url="file://$MODULE_DIR$/classes/production/progfun-nodescala" />
     <output-test url="file://$MODULE_DIR$/classes/test/progfun-nodescala" />
@@ -259,6 +252,7 @@
     <orderEntry type="inheritedJdk" />
     <orderEntry type="library" name="scalanode-libs" level="project" />
     <orderEntry type="library" name="org.scala-lang.modules:scala-async_2.10:0.9.0-M4" level="project" />
+    <orderEntry type="library" name="scala-sdk" level="project" />
   </component>
 </module>
 

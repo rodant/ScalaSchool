@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/progfun-quickcheck.iml" filepath="$PROJECT_DIR$/progfun-quickcheck.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/progfun-quickcheck-build.iml" filepath="$PROJECT_DIR$/.idea/modules/progfun-quickcheck-build.iml" />
     </modules>
   </component>
 </project>
