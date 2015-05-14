@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="scalanode-libs">
-    <CLASSES>
-      <root url="jar://$PROJECT_DIR$/lib_managed/jars/org.scala-lang/scala-actors/scala-actors-2.10.1.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

@@ -1,31 +1,27 @@
 package nodescala
 
-
-
+import scala.collection.mutable.ListBuffer
 import scala.language.postfixOps
-import scala.util.{Success, Failure}
+import scala.util.{Try, Success, Failure}
 import scala.collection._
 import scala.concurrent._
 import ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.async.Async.async
+import scala.async.Async.{async, await}
 import org.scalatest._
 import NodeScala._
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
-import scala.NoSuchElementException
-import scala.collection.mutable.ListBuffer
 
 @RunWith(classOf[JUnitRunner])
 class NodeScalaSuite extends FunSuite {
 
-  test("A Future should always be created") {
+  test("A Future should always be completed") {
     val always = Future.always(517)
 
     assert(Await.result(always, 0 nanos) == 517)
   }
-
-  test("A Future should never be created") {
+  test("A Future should never be completed") {
     val never = Future.never[Int]
 
     try {
@@ -124,7 +120,7 @@ class NodeScalaSuite extends FunSuite {
     cts.unsubscribe()
     assert(Await.result(p.future, 1 second) == "done")
   }
-
+  
   class DummyExchange(val request: Request) extends Exchange {
     @volatile var response = ""
     val loaded = Promise[String]()
@@ -251,7 +247,6 @@ class NodeScalaSuite extends FunSuite {
       case _: Throwable => assert(false, "Exception!")
     }
   }
-
 }
 
 

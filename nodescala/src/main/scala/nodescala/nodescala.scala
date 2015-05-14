@@ -1,14 +1,15 @@
 package nodescala
 
+import com.sun.net.httpserver._
 import scala.concurrent._
+import scala.concurrent.duration._
 import ExecutionContext.Implicits.global
 import scala.async.Async.{async, await}
 import scala.collection._
 import scala.collection.JavaConversions._
-import java.util.concurrent.{ThreadPoolExecutor, TimeUnit, LinkedBlockingQueue}
+import java.util.concurrent.{Executor, ThreadPoolExecutor, TimeUnit, LinkedBlockingQueue}
 import com.sun.net.httpserver.{HttpExchange, HttpHandler, HttpServer}
 import java.net.InetSocketAddress
-import scala.util.Success
 
 /** Contains utilities common to the NodeScala© framework.
  */
@@ -25,7 +26,7 @@ trait NodeScala {
    *  response may take very long to finish.
    *
    *  @param exchange     the exchange used to write the response back
-   *  @param token        the cancellation token for
+   *  @param token        the cancellation token
    *  @param body         the response to write back
    */
   private def respond(exchange: Exchange, token: CancellationToken, response: Response): Unit = {
@@ -47,16 +48,16 @@ trait NodeScala {
   }
 
   /** A server:
-
-    *  1) creates and starts an http listener
+   *  1) creates and starts an http listener
    *  2) creates a cancellation token (hint: use one of the `Future` companion methods)
-   *  3) as long as the token is not cancelled and there is a request from the http listener
+   *  3) as long as the token is not cancelled and there is a request from the http listener,
    *     asynchronously process that request using the `respond` method
    *
-   *  @param relativePath   a relative path on which to start listening on
+   *  @param relativePath   a relative path on which to start listening
    *  @param handler        a function mapping a request to a response
-   *  @return               a subscription that can stop the server and all its asynchronous operations *entirely*.
+   *  @return               a subscription that can stop the server and all its asynchronous operations *entirely*
    */
+
   def start(relativePath: String)(handler: Request => Response): Subscription = {
     val listener = createListener(relativePath)
     val listenerSubscription = listener.start()
@@ -77,7 +78,6 @@ trait NodeScala {
     }
     Subscription(listenerSubscription, contextSubscription)
   }
-
 }
 
 
@@ -95,7 +95,7 @@ object NodeScala {
 
   /** Used to write the response to the request.
    */
-  trait Exchange { 
+  trait Exchange {
     /** Writes to the output stream of the exchange.
      */
     def write(s: String): Unit
@@ -136,22 +136,24 @@ object NodeScala {
 
     def removeContext(): Unit
 
-    /** Given a relative path:
+    /** This Method:
      *  1) constructs an uncompleted promise
-     *  2) installs an asynchronous request handler using `createContext`
-     *     that completes the promise with a request when it arrives
-     *     and then deregisters itself using `removeContext`
+     *  2) installs an asynchronous `HttpHandler` to the `server`
+     *     that deregisters itself
+     *     and then completes the promise with a request when `handle` method is invoked
      *  3) returns the future with the request
      *
-     *  @param relativePath    the relative path on which we want to listen to requests
      *  @return                the promise holding the pair of a request and an exchange object
      */
     def nextRequest(): Future[(Request, Exchange)] = {
       val p = Promise[(Request, Exchange)]()
-      createContext { ex =>
-        p.complete(Success((ex.request, ex)))
+
+      createContext(xchg => {
+        val req = xchg.request
         removeContext()
-      }
+        p.success((req, xchg))
+      })
+
       p.future
     }
   }
