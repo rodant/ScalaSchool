@@ -33,16 +33,8 @@ class WikipediaApiTest extends FunSuite {
 
   import mockApi._
 
-  /*test("timeOut should return the first value") {
-    var count = 0
-    Observable(1, 2, 3).zip(Observable.interval(700 millis)).timedOut(1L).subscribe { pair =>
-      count += 1
-    }
-    assert(count == 1, s"count = $count")
-  }*/
-
   test("WikipediaApi should make the stream valid using sanitized") {
-    val notvalid = Observable("erik", "erik meijer", "martin")
+    val notvalid = Observable.just("erik", "erik meijer", "martin")
     val valid = notvalid.sanitized
 
     var count = 0
@@ -58,10 +50,9 @@ class WikipediaApiTest extends FunSuite {
     )
     assert(completed && count == 3, "completed: " + completed + ", event count: " + count)
   }
-
   test("WikipediaApi should correctly use concatRecovered") {
-    val requests = Observable(1, 2, 3)
-    val remoteComputation = (n: Int) => Observable(0 to n)
+    val requests = Observable.just(1, 2, 3)
+    val remoteComputation = (n: Int) => Observable.just(0 to n : _*)
     val responses = requests concatRecovered remoteComputation
     val sum = responses.foldLeft(0) { (acc, tn) =>
       tn match {
@@ -74,5 +65,13 @@ class WikipediaApiTest extends FunSuite {
       s => total = s
     }
     assert(total == (1 + 1 + 2 + 1 + 2 + 3), s"Sum: $total")
+  }
+
+  test("WikipediaApi shouldn't stop stream after an error") {
+    val requests = Observable.just(1, 2, 3)
+    val exception: Exception = new scala.Exception
+    val remoteComputation = (n: Int) => if (n != 2) Observable.just(n) else Observable.error(exception)
+    val responses = requests concatRecovered remoteComputation
+    assert(List(Success(1), Failure(exception), Success(3)) == responses.toBlocking.toList)
   }
 }

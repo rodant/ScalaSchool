@@ -67,7 +67,7 @@ class SwingApiTest extends FunSuite {
   }
 
   import swingApi._
-
+  
   test("SwingApi should emit text field values to the observable") {
     val textField = new swingApi.TextField
     val values = textField.textValues
@@ -87,4 +87,5 @@ class SwingApiTest extends FunSuite {
 
     assert(observed == Seq("T", "Tu", "Tur", "Turi", "Turin", "Turing"), observed)
   }
+
 }

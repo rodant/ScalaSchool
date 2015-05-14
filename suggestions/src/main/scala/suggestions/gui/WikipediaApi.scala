@@ -2,14 +2,16 @@ package suggestions
 package gui
 
 import scala.language.postfixOps
+import scala.collection.mutable.ListBuffer
+import scala.collection.JavaConverters._
 import scala.concurrent._
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.{Failure, Try, Success}
+import scala.util.{ Try, Success, Failure }
+import rx.subscriptions.CompositeSubscription
 import rx.lang.scala.Observable
 import observablex._
-import rx.lang.scala.Notification.{OnCompleted, OnError, OnNext}
-import rx.lang.scala.subjects.ReplaySubject
+import search._
 
 trait WikipediaApi {
 
@@ -23,11 +25,11 @@ trait WikipediaApi {
 
   /** Returns an `Observable` with a list of possible completions for a search `term`.
    */
-  def wikiSuggestResponseStream(term: String): Observable[List[String]] = ObservableEx(wikipediaSuggestion(term))
+  def wikiSuggestResponseStream(term: String): Observable[List[String]] = ObservableEx(wikipediaSuggestion(term)).timedOut(1L)
 
   /** Returns an `Observable` with the contents of the Wikipedia page for the given search `term`.
    */
-  def wikiPageResponseStream(term: String): Observable[String] = ObservableEx(wikipediaPage(term))
+  def wikiPageResponseStream(term: String): Observable[String] = ObservableEx(wikipediaPage(term)).timedOut(1L)
 
   implicit class StringObservableOps(obs: Observable[String]) {
 
@@ -46,27 +48,7 @@ trait WikipediaApi {
      *
      * E.g. `1, 2, 3, !Exception!` should become `Success(1), Success(2), Success(3), Failure(Exception), !TerminateStream!`
      */
-    def recovered: Observable[Try[T]] = {
-      val result = ReplaySubject[Try[T]]()
-      obs.materialize.subscribe(_ match {
-        case OnNext(t) => result.onNext(Success(t))
-        case OnError(e) => result.onNext(Failure(e))
-        case OnCompleted(u) => result.onCompleted()
-      })
-
-      result
-    }
-
-    /** Returns a future with a unit value that is completed after time `t`.
-      */
-    def delay(t: Duration): Future[Unit] = {
-      Future[Unit] {
-        blocking {
-          Thread.sleep(t.toMillis)
-          Future.successful(())
-        }
-      }
-    }
+    def recovered: Observable[Try[T]] = obs.map(e =>Try(e)).onErrorReturn(Failure(_))
 
     /** Emits the events from the `obs` observable, until `totalSec` seconds have elapsed.
      *
@@ -74,11 +56,7 @@ trait WikipediaApi {
      *
      * Note: uses the existing combinators on observables.
      */
-    def timedOut(totalSec: Long): Observable[T] = {
-      val seconds = Observable.interval(totalSec second).filter(_ > 0).take(1)
-      obs.takeUntil(seconds)
-    }
-
+    def timedOut(totalSec: Long): Observable[T] = obs.take(totalSec seconds)
 
     /** Given a stream of events `obs` and a method `requestMethod` to map a request `T` into
      * a stream of responses `S`, returns a stream of all the responses wrapped into a `Try`.
@@ -105,7 +83,11 @@ trait WikipediaApi {
      *
      * Observable(Success(1), Succeess(1), Succeess(1), Succeess(2), Succeess(2), Succeess(2), Succeess(3), Succeess(3), Succeess(3))
      */
-    def concatRecovered[S](requestMethod: T => Observable[S]): Observable[Try[S]] = obs.flatMap(requestMethod).recovered
+    def concatRecovered[S](requestMethod: T => Observable[S]): Observable[Try[S]] = obs.recovered.flatMap { t =>
+      t match {
+        case Success(e) => requestMethod(e).recovered
+        case Failure(e) => Observable.error(e)
+    }}
 
   }
 
